@@ -98,7 +98,7 @@ async fn main() {
         return;
     }
 
-    println!("Get page.");
+    print!("\rGet page.");
 
     let data = client
         .get("https://b-p.msub.kr/novelp/list/?p=all&id=".to_owned() + &book_id)
@@ -109,8 +109,53 @@ async fn main() {
         .await
         .unwrap();
     let json = serde_json::from_str::<Value>(&data).unwrap();
-    let result = json["result"].as_array().unwrap();
-    println!("{}", result.len());
+    let list = json["result"].as_array().unwrap();
+    println!(
+        "Get page. {}/{}\n",
+        json["p"].as_u64().unwrap(),
+        json["p"].as_u64().unwrap()
+    );
+    println!("\r0/0 [0%]");
+
+    let mut result = String::new();
+
+    // for each of list send list["link"] to https://b-p.msub.kr/novelp/view/?id=link
+    for i in 0..list.len() {
+        let link = list[i]["link"].as_str().unwrap();
+        let data = client
+            .get("https://b-p.msub.kr/novelp/view/?id=".to_owned() + link)
+            .send()
+            .await
+            .unwrap()
+            .text()
+            .await
+            .unwrap();
+        let json = serde_json::from_str::<Value>(&data).unwrap();
+        if !json["err"].is_null() {
+            println!("Failed to get {}: {}", link, json["err"]);
+            continue;
+        }
+        let text = json["result"].as_str().unwrap();
+        result += list[i]["title"].as_str().unwrap();
+        result += "\n\n\n\n\n";
+        result += text;
+        result += "\n\n\n\n\n\n\n\n\n\n";
+        print!(
+            "\r{}/{} [{}%]",
+            i + 1,
+            list.len(),
+            (i + 1) * 100 / list.len()
+        );
+        // sleep 10 ms
+        tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+    }
+
+    // save result in ./result.txt
+    let mut file = fs::File::create("result.txt").unwrap();
+    file.write_all(result.as_bytes()).unwrap();
+    println!("\n\nDone! check ./result.txt");
+
+    end();
 }
 
 // make function input with str type String
@@ -122,9 +167,9 @@ fn input(msg: &str) -> String {
     input
 }
 
-// say press enter to exit
+// print press enter to exit
 fn end() {
-    println!("Press enter to exit.");
+    println!("\n\nPress enter to exit.");
     let mut input = String::new();
     io::stdin().read_line(&mut input).unwrap();
 }
