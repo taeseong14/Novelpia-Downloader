@@ -7,12 +7,13 @@ use std::{
 
 #[tokio::main]
 async fn main() {
-    println!("Novelpia Downloader with Rust by taeseong14\n\n[Login]\n");
+    println!("Novelpia Downloader with Rust by taeseong14");
+    println!("\n[Login]\n");
 
     let client = reqwest::Client::new();
 
-    let mut id = String::new();
-    let mut pw = String::new();
+    let mut id;
+    let pw;
 
     // check the file exists: account.txt
     if fs::metadata("account.txt").is_ok() {
@@ -23,23 +24,19 @@ async fn main() {
         let arr: Vec<&str> = contents.split("\n").collect();
         id = arr[0].to_string();
         pw = arr[1].to_string();
-        println!("login with {}...", id);
+        println!("Login with {}...", id);
     } else {
-        print!("id: ");
-        let _ = io::stdout().flush();
-        io::stdin().read_line(&mut id).unwrap();
+        id = input("id: ");
         // if id doesn't contain @, add @gmail.com
         if !id.contains("@") {
             id = id.trim().to_string() + "@gmail.com";
             println!("id: {}", id);
         }
-        print!("pw: ");
-        let mut pw = String::new();
-        let _ = io::stdout().flush();
-        io::stdin().read_line(&mut pw).expect("Failed to read line");
-
-        println!("\nlogin...");
+        pw = input("pw: ");
+        println!();
+        print!("\rLogin...");
     }
+
     let data = client
         .post("https://b-p.msub.kr/novelp/login")
         // body with json
@@ -56,13 +53,17 @@ async fn main() {
     let json = serde_json::from_str::<Value>(&data).unwrap();
     // check if json["err"] is null
     if !json["err"].is_null() {
-        println!("Login failed: {}", json["err"]);
+        println!("\rLogin failed: {}", json["err"]);
+        // remove the file
+        fs::remove_file("account.txt").unwrap();
+        println!("./account.txt removed");
+        end();
         return;
     }
 
     // let loginkey = json["result"].as_str().unwrap();
 
-    println!("login success");
+    println!("\rLogin success\n");
 
     // write the file if not exists
     if fs::metadata("account.txt").is_err() {
@@ -70,15 +71,12 @@ async fn main() {
         file.write_all(id.as_bytes()).unwrap();
         file.write_all(b"\n").unwrap();
         file.write_all(pw.as_bytes()).unwrap();
-        println!("login data saved in ./account.txt");
+        println!("Login data saved in ./account.txt\n");
     }
 
-    print!("bookId: ");
-    let mut book_id = String::new();
-    let _ = io::stdout().flush();
-    io::stdin().read_line(&mut book_id).unwrap();
+    let book_id = input("bookId: ");
 
-    println!("\rloading book info...");
+    print!("\rloading book info...");
 
     let data = client
         .get("https://b-p.msub.kr/novelp/info/?id=".to_owned() + &book_id)
@@ -91,13 +89,14 @@ async fn main() {
     let json = serde_json::from_str::<Value>(&data).unwrap();
     let book_name = json["result"]["title"].as_str().unwrap();
     let book_author = json["result"]["author"].as_str().unwrap();
-    print!("[{} - {}] is right? (y/n): ", book_name, book_author);
+    print!("\r[{} - {}] is right? (y/n): ", book_name, book_author);
     let mut yn = String::new();
     let _ = io::stdout().flush();
     io::stdin().read_line(&mut yn).unwrap();
     // if yn doesn't contain y, exit
     if !yn.contains("y") {
         println!("exit");
+        end();
         return;
     }
 
@@ -111,8 +110,23 @@ async fn main() {
         .text()
         .await
         .unwrap();
-    println!("{}", data);
     let json = serde_json::from_str::<Value>(&data).unwrap();
     let result = json["result"].as_array().unwrap();
     println!("{}", result.len());
+}
+
+// make function input with str type String
+fn input(msg: &str) -> String {
+    let mut input = String::new();
+    print!("{}", msg);
+    let _ = io::stdout().flush();
+    io::stdin().read_line(&mut input).unwrap();
+    input
+}
+
+// say press enter to exit
+fn end() {
+    println!("Press enter to exit.");
+    let mut input = String::new();
+    io::stdin().read_line(&mut input).unwrap();
 }
