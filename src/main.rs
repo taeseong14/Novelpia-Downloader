@@ -89,10 +89,8 @@ async fn main() {
     let json = serde_json::from_str::<Value>(&data).unwrap();
     let book_name = json["result"]["title"].as_str().unwrap();
     let book_author = json["result"]["author"].as_str().unwrap();
-    print!("\r[{} - {}] is right? (y/n): ", book_name, book_author);
-    let mut yn = String::new();
-    let _ = io::stdout().flush();
-    io::stdin().read_line(&mut yn).unwrap();
+
+    let yn = input(format!("\r[{} - {}] is right? (y/n): ", book_name, book_author).as_str());
     // if yn doesn't contain y, exit
     if !yn.contains("y") {
         println!("exit");
