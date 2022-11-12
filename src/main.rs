@@ -1,3 +1,4 @@
+use futures::future;
 use reqwest;
 use serde_json::Value;
 use std::{
@@ -111,43 +112,46 @@ async fn main() {
     let json = serde_json::from_str::<Value>(&data).unwrap();
     let list = json["result"].as_array().unwrap();
     println!(
-        "Get page. {}/{}\n",
+        "\rGet page. {}/{}\n",
         json["p"].as_u64().unwrap(),
         json["p"].as_u64().unwrap()
     );
-    println!("\r0/0 [0%]");
+    print!("\r0/0 [0%]");
 
+    // string array
     let mut result = String::new();
 
-    // for each of list send list["link"] to https://b-p.msub.kr/novelp/view/?id=link
-    for i in 0..list.len() {
-        let link = list[i]["link"].as_str().unwrap();
-        let data = client
-            .get("https://b-p.msub.kr/novelp/view/?id=".to_owned() + link)
-            .send()
-            .await
-            .unwrap()
-            .text()
-            .await
-            .unwrap();
-        let json = serde_json::from_str::<Value>(&data).unwrap();
-        if !json["err"].is_null() {
-            println!("Failed to get {}: {}", link, json["err"]);
-            continue;
+    // make urls vector from list["link"]
+    let urls = list
+        .iter()
+        .map(|x| "https://b-p.msub.kr/novelp/view/?id=".to_owned() + &x["link"].as_str().unwrap())
+        .collect::<Vec<String>>();
+
+    // for each of list make bodies with reqwest to htttp://b-p.msub.kr/novelp/view/?id=list[i]["link"]
+    let bodies = future::join_all(urls.into_iter().map(|url| {
+        let client = &client;
+        async move {
+            let resp = client.get(url).send().await?;
+            resp.text().await
         }
-        let text = json["result"].as_str().unwrap();
-        result += list[i]["title"].as_str().unwrap();
-        result += "\n\n\n\n\n";
-        result += text;
-        result += "\n\n\n\n\n\n\n\n\n\n";
-        print!(
-            "\r{}/{} [{}%]",
-            i + 1,
-            list.len(),
-            (i + 1) * 100 / list.len()
-        );
-        // sleep 10 ms
-        tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+    }))
+    .await;
+
+    let mut i = 0;
+    for b in bodies {
+        match b {
+            Ok(b) => {
+                let json = serde_json::from_str::<Value>(&b).expect("json parse error");
+                let content = json["result"].as_str().unwrap();
+                result += list[i]["title"].as_str().unwrap();
+                i += 1;
+                result += "\n\n\n\n\n";
+                result += content;
+                result += "\n\n\n\n\n\n\n\n\n\n";
+                print!("\r{}/{} [{}%]", i, list.len(), i * 100 / list.len());
+            }
+            Err(e) => eprintln!("Got an error: {}", e),
+        }
     }
 
     // save result in ./result.txt
